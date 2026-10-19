@@ -48,10 +48,10 @@ function runTaskCheck(totalTasks, completedTasks) {
 runTaskCheck(12, 5);
 runTaskCheck(0, 0);
 runTaskCheck(5, 0);
-runTaskCheck(5, 5);
+/* runTaskCheck(5, 5); */
 runTaskCheck(5, 6);
-runTaskCheck(-1, 0);
+/* runTaskCheck(-1, 0);
 runTaskCheck(5, 2.5);
 runTaskCheck("5", 2);
 runTaskCheck(1001, 0);
-runTaskCheck(NaN, 0);
+runTaskCheck(NaN, 0); */

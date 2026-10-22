@@ -9,7 +9,7 @@ import {
 import { getVisibleTasks } from "./task-selectors.js";
 import { renderEmptyState, renderSummary, renderTaskList } from "./task-view.js";
 import { validateTaskDraft } from "./form-validation.js";
-import { loadTasks, removeSavedTasks, saveTasks } from "./task-storage.js";
+import { loadTasks, removeSavedTasks, saveTasks, saveDraft, loadDraft, removeDraft } from "./task-storage.js";
 
 const elements = {
   list: document.querySelector("#task-list"),
@@ -71,11 +71,33 @@ if (loaded.source === "storage") {
   elements.storageStatus.classList.add("is-warning");
 }
 
+const draftKey = isCheckRun
+  ? `tip-js-practice-04:checks:${datasetName}:draft`
+  : `tip-js-practice-04:${datasetName}:draft`;
+
 function renderApp() {
   // TODO: перенести согласованную отрисовку ПР3.
   // Отобрать задачи, обновить список, сводку, пустое состояние и кнопки фильтра.
   // Не читать и не записывать localStorage внутри функции отрисовки.
-  throw new Error("Не реализовано: renderApp");
+    const visibleTasks = getVisibleTasks(currentTasks, currentFilter);
+  
+  // 2. Отрисовываем список задач
+  renderTaskList(elements.list, visibleTasks);
+  
+  // 3. Отрисовываем сводку (всего, выполнено, осталось, прогресс, показано)
+  renderSummary(elements.summary, currentTasks, visibleTasks.length);
+  
+  // 4. Показываем/скрываем сообщение о пустом списке
+  renderEmptyState(elements.empty, visibleTasks.length);
+  
+  // 5. Обновляем состояние кнопок фильтра (активная кнопка)
+  const filterButtons = elements.filters.querySelectorAll('button[data-filter]');
+  filterButtons.forEach(btn => {
+    const isActive = btn.dataset.filter === currentFilter;
+    btn.classList.toggle('is-active', isActive);
+    btn.setAttribute('aria-pressed', String(isActive));
+  });
+  //throw new Error("Не реализовано: renderApp");
 }
 
 function clearFieldError(name) {
@@ -111,8 +133,38 @@ function setFormMode(id = null) {
   // TODO: для null очистить форму и включить режим создания.
   // Для существующего id заполнить поля, заблокировать изменение id
   // и включить режим редактирования. Отсутствующий id обработать как отказ.
-  void id;
-  throw new Error("Не реализовано: setFormMode");
+  if (id === null){
+    editingId = null;
+    clearFormErrors();
+    elements.form.reset();
+
+    elements.idInput.disabled = false;
+    elements.formHeading.textContent = "Добавление задачи";
+    elements.submitButton.textContent = "Добавить задачу";
+    elements.cancelButton.hidden = true;
+    elements.idInput.focus();
+  } else {
+    const task = findTaskById(currentTasks,id);
+    if(!task){
+      elements.message.textContent = `Задача с ID ${id} не найдена.`; 
+      return;   }
+    editingId = id;
+    clearFormErrors();
+
+
+    elements.idInput.value = task.id;
+    elements.titleInput.value = task.title;
+    elements.priorityInput.value = task.priority;
+
+    elements.idInput.disabled = true;
+    elements.formHeading.textContent = "Редактирование задачи";
+    elements.submitButton.textContent = "Сохранить изменения";
+    elements.cancelButton.hidden = false;
+
+    elements.titleInput.focus();
+  }
+
+  //throw new Error("Не реализовано: setFormMode");
 }
 
 function persistCurrentTasks(successMessage) {
@@ -143,8 +195,45 @@ function handleFormSubmit(event) {
   // В режиме создания вызвать addTask, в режиме редактирования — updateTask.
   // При успехе сохранить новый массив, выйти из режима редактирования,
   // записать localStorage и обновить интерфейс.
-  throw new Error("Не реализовано: handleFormSubmit");
+  const formData = new FormData(elements.form);
+  const draft = {
+    id: formData.get("id"),
+    title: formData.get("title"),
+    priority: formData.get("priority"),
+  };
+
+  const validation = validateTaskDraft(draft, currentTasks, editingId);
+
+  if (!validation.ok) {
+    showFormErrors(validation.errors);
+    return;
+  }
+
+  let result;
+  if (editingId === null) {
+    result = addTask(currentTasks, validation.value.id, validation.value.title, validation.value.priority);
+  } else {
+    result = updateTask(currentTasks, editingId, validation.value.title, validation.value.priority);
+  }
+
+  if (result.ok) {
+    currentTasks = result.tasks;
+    const successMsg = editingId === null ? "Задача добавлена." : "Задача обновлена.";
+    persistCurrentTasks(successMsg);
+    
+    // Удаляем черновик после успешного добавления (только в режиме создания)
+    if (editingId === null) {
+      removeDraft(window.localStorage, draftKey);
+    }
+    
+    setFormMode(null);
+  } else {
+    elements.formMessage.textContent = result.error;
+  }
 }
+
+  //throw new Error("Не реализовано: handleFormSubmit");
+
 
 function handleTaskListClick(event) {
   // TODO: перенести toggle/delete из ПР3 и добавить действие edit.
@@ -152,37 +241,153 @@ function handleTaskListClick(event) {
   // После успешных toggle/delete сохранить currentTasks через persistCurrentTasks,
   // затем вызвать restoreTaskFocus(id, action).
   void event;
-  throw new Error("Не реализовано: handleTaskListClick");
+   if (!event.target || typeof event.target.closest !== 'function') return;
+  const button = event.target.closest('button[data-action]');
+  if (!button) return;
+
+  const action = button.dataset.action;
+  if (action !== 'toggle' && action !== 'delete' && action !== 'edit') return;
+
+  const taskCard = button.closest('li[data-task-id]');
+  if (!taskCard) return;
+  
+  const id = Number(taskCard.dataset.taskId);
+  if (isNaN(id) || id <= 0) {
+    elements.message.textContent = "Некорректный идентификатор задачи.";
+    return;
+  }
+
+  // --- ДЕЙСТВИЕ EDIT ---
+  if (action === 'edit') {
+    setFormMode(id); // Переход в режим редактирования, БЕЗ сохранения
+    return;
+  }
+
+  // --- ДЕЙСТВИЯ TOGGLE И DELETE ---
+  let result;
+
+  if (action === 'toggle') {
+    const foundItem = findTaskById(currentTasks, id);
+    if (!foundItem) {
+      elements.message.textContent = `Задача с id ${id} не найдена.`;
+      return;
+    }
+    const nextCompletedStatus = !foundItem.completed;
+    result = setTaskCompleted(currentTasks, id, nextCompletedStatus);
+  } else if (action === 'delete') {
+    result = removeTask(currentTasks, id);
+  }
+
+  if (result && result.ok) {
+    currentTasks = result.tasks;
+    
+    // Если удалили редактируемую задачу — сбрасываем форму
+    if (action === 'delete' && editingId === id) {
+      setFormMode(null);
+    }
+
+    elements.message.textContent = "";
+    
+    // СОХРАНЕНИЕ В LOCALSTORAGE (обязательно для toggle и delete)
+    const saved = saveTasks(window.localStorage, storageKey, currentTasks);
+    if (!saved.ok) {
+      elements.message.textContent = saved.error;
+    }
+
+    renderApp();
+    
+    if (typeof restoreTaskFocus === 'function') {
+      restoreTaskFocus(id, action);
+    }
+  } else if (result && !result.ok) {
+    elements.message.textContent = result.error;
+  }
+  //throw new Error("Не реализовано: handleTaskListClick");
 }
 
 function handleFilterClick(event) {
   // TODO: перенести реализацию ПР3. Выбор фильтра не сохраняется в localStorage.
   void event;
-  throw new Error("Не реализовано: handleFilterClick");
+  if (!event.target || typeof event.target.closest !== "function") return;
+  const button = event.target.closest("button[data-filter]");
+  if (!button) return;
+  
+  const selectedFilter = button.dataset.filter;
+  if (!["all", "pending", "completed"].includes(selectedFilter)) return;
+  
+  currentFilter = selectedFilter;
+  elements.message.textContent = ""; // Очищаем сообщение
+  renderApp();
+  //throw new Error("Не реализовано: handleFilterClick");
 }
 
 function handleResetClick() {
   // TODO: удалить только storageKey, восстановить копию initialTasks,
   // вернуть фильтр all, выйти из редактирования и обновить приложение.
   // Ошибку removeSavedTasks показать пользователю, исключение не выпускать.
-  throw new Error("Не реализовано: handleResetClick");
+  // Удаляем только текущий storageKey
+  const removed = removeSavedTasks(window.localStorage, storageKey);
+  
+  if (!removed.ok) {
+    elements.message.textContent = removed.error;
+    return;
+  }
+
+  // Восстанавливаем копию initialTasks (не сохраняем обратно!)
+  currentTasks = initialTasks.map((task) => ({ ...task }));
+  
+  // Возвращаем фильтр all
+  currentFilter = "all";
+  
+  // Возвращаем форму в режим создания
+  setFormMode(null);
+  
+  elements.message.textContent = "Данные сброшены к исходному состоянию.";
+  
+  // Обновляем интерфейс
+  renderApp();
+  //throw new Error("Не реализовано: handleResetClick");
 }
 
 elements.form.addEventListener("submit", handleFormSubmit);
-elements.form.addEventListener("input", (event) => {
-  if (event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement) {
-    clearFieldError(event.target.name);
-  }
-});
 elements.list.addEventListener("click", handleTaskListClick);
 elements.filters.addEventListener("click", handleFilterClick);
 elements.cancelButton.addEventListener("click", () => setFormMode());
 elements.resetButton.addEventListener("click", handleResetClick);
+elements.form.addEventListener("input", (event) => {
+  const target = event.target;
+  if (target instanceof HTMLInputElement || target instanceof HTMLSelectElement) {
+    clearFieldError(target.name);
+    
+    // Сохраняем черновик только в режиме создания
+    if (editingId === null) {
+      const formData = new FormData(elements.form);
+      const draft = {
+        id: formData.get("id"),
+        title: formData.get("title"),
+        priority: formData.get("priority")
+      };
+      saveDraft(window.localStorage, draftKey, draft);
+    }
+  }
+});
 
 try {
-  setFormMode();
+  setFormMode(); // Сначала сбрасываем форму в режим создания
+  
+  // ПОТОМ восстанавливаем черновик (перезаписываем поля)
+  if (editingId === null) {
+    const draftResult = loadDraft(window.localStorage, draftKey);
+    if (draftResult.ok && draftResult.draft) {
+      elements.idInput.value = draftResult.draft.id;
+      elements.titleInput.value = draftResult.draft.title;
+      elements.priorityInput.value = draftResult.draft.priority;
+    }
+  }
+  
   renderApp();
 } catch (error) {
   elements.message.textContent = `Ошибка запуска: ${error.message}`;
   console.error(error);
 }
+

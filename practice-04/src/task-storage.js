@@ -97,3 +97,52 @@ export function removeSavedTasks(storage, key) {
     };
   }
 }
+
+export function saveDraft(storage, key, draft) {
+  try {
+    storage.setItem(key, JSON.stringify(draft));
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: `Не удалось сохранить черновик: ${error.message}` };
+  }
+}
+
+export function loadDraft(storage, key) {
+  try {
+    const raw = storage.getItem(key);
+    if (raw === null) {
+      return { ok: true, draft: null };
+    }
+    
+    const parsed = JSON.parse(raw);
+    
+    // Проверка схемы черновика
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+      return { ok: false, error: "Некорректный формат черновика" };
+    }
+    
+    // Проверяем наличие обязательных полей
+    if (typeof parsed.id !== "string" && typeof parsed.id !== "number") {
+      return { ok: false, error: "Черновик содержит некорректный id" };
+    }
+    if (typeof parsed.title !== "string") {
+      return { ok: false, error: "Черновик содержит некорректный title" };
+    }
+    if (typeof parsed.priority !== "string") {
+      return { ok: false, error: "Черновик содержит некорректный priority" };
+    }
+    
+    return { ok: true, draft: parsed };
+  } catch (error) {
+    return { ok: false, error: `Не удалось прочитать черновик: ${error.message}` };
+  }
+}
+
+export function removeDraft(storage, key) {
+  try {
+    storage.removeItem(key);
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: `Не удалось удалить черновик: ${error.message}` };
+  }
+}

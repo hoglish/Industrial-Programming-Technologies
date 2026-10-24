@@ -1,4 +1,4 @@
-import { createApiClient } from "./api-client.js";
+import { createApiClient, ApiError } from "./api-client.js";
 import { createAppController } from "./app-controller.js";
 import { createDomView } from "./dom-app.js";
 import { createTaskApi } from "./task-api.js";
@@ -9,6 +9,53 @@ function readApiUrl(params) {
   const url = new URL(value);
   if (!["http:", "https:"].includes(url.protocol)) throw new TypeError("Неверный протокол API.");
   return url.href.replace(/\/$/, "");
+}
+
+// Синхронное создание задачи через XMLHttpRequest.
+// Возвращает подтверждённый сервером объект (ответ 201).
+// Применяется только для операции создания — остальное идёт через fetch.
+function makeSyncCreate(baseUrl) {
+  return function syncCreate(draft) {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", `${baseUrl}/tasks`, false); // false = синхронный режим
+    xhr.setRequestHeader("Content-Type", "application/json");
+    xhr.setRequestHeader("Accept", "application/json");
+    try {
+      xhr.send(JSON.stringify(draft));
+    } catch (error) {
+      throw new ApiError("Сетевая ошибка при создании задачи.", {
+        kind: "network",
+        cause: error,
+      });
+    }
+    let payload = null;
+    try {
+      payload = JSON.parse(xhr.responseText);
+    } catch {
+      throw new ApiError("Ответ сервера не является корректным JSON.", {
+        kind: "invalid-response",
+        status: xhr.status,
+      });
+    }
+    if (xhr.status !== 201) {
+      const code = payload?.error?.code ?? null;
+      const details = payload?.error?.details ?? null;
+      const message = payload?.error?.message || `HTTP ${xhr.status}`;
+      throw new ApiError(message, {
+        kind: "http",
+        status: xhr.status,
+        code,
+        details,
+      });
+    }
+    if (!payload || !payload.data || typeof payload.data !== "object") {
+      throw new ApiError("Ответ создания задачи не соответствует схеме.", {
+        kind: "invalid-response",
+        status: xhr.status,
+      });
+    }
+    return payload.data;
+  };
 }
 
 const view = createDomView();
@@ -24,9 +71,11 @@ try {
 
   const client = createApiClient({ baseUrl, timeoutMs: 3000 });
   const api = createTaskApi(client);
-  const controller = createAppController({ api, view });
+  const syncCreate = makeSyncCreate(baseUrl);
+  const controller = createAppController({ api, view, syncCreate });
 
   view.connect({
+    submitSync: (draft) => controller.submitSync(draft),
     submit: (draft) => controller.submit(draft),
     filters: (filters) => controller.applyFilters(filters),
     refresh: () => controller.refresh(),

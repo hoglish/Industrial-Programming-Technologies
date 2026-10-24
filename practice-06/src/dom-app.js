@@ -1,4 +1,4 @@
-import { renderTaskList } from "./task-view.js";
+import { renderTaskList, createTaskElement } from "./task-view.js";
 
 function required(root, selector) {
   const node = root.querySelector(selector);
@@ -64,7 +64,13 @@ export function createDomView(root = document) {
     connect(handlers) {
       nodes.taskForm.addEventListener("submit", (event) => {
         event.preventDefault();
-        handlers.submit(readDraft());
+        // Синхронный путь: если контроллер умеет, создаём задачу
+        // и вставляем карточку до возврата из обработчика.
+        if (typeof handlers.submitSync === "function") {
+          handlers.submitSync(readDraft());
+        } else {
+          handlers.submit(readDraft());
+        }
       });
       nodes.filtersForm.addEventListener("submit", (event) => {
         event.preventDefault();
@@ -124,6 +130,18 @@ export function createDomView(root = document) {
 
     setTasks(tasks, categories) {
       renderTaskList(nodes.list, tasks, categories);
+    },
+
+    // Синхронно вставляет одну подтверждённую сервером задачу в список.
+    appendTask(task, categories) {
+      const category = (categories ?? []).find((c) => c.id === task.categoryId);
+      nodes.list.append(createTaskElement(task, category));
+      nodes.list.hidden = false;
+      nodes.listPanel.setAttribute("aria-busy", "false");
+      nodes.listState.dataset.kind = "ready";
+      nodes.stateMessage.textContent = "";
+      nodes.retry.hidden = true;
+      nodes.total.textContent = String(nodes.list.children.length);
     },
 
     setTotal(value) {

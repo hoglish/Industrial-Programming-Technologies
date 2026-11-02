@@ -80,13 +80,11 @@ export function createApiClient(options = {}) {
   if (timeoutMs <= 0) throw new TypeError("timeoutMs должен быть положительным числом.");
 
   async function requestJson(path, { query, signal, timeoutMs: overrideTimeoutMs, method, body } = {}) {
-    // Нормализация метода
     const rawMethod = typeof method === "string" ? method.toUpperCase() : "GET";
     if (!ALLOWED_METHODS.has(rawMethod)) {
       throw new TypeError(`Недопустимый HTTP-метод: ${method}.`);
     }
 
-    // GET с body запрещён
     if (rawMethod === "GET" && body !== undefined && body !== null) {
       throw new TypeError("GET-запрос не может содержать тело.");
     }
@@ -107,7 +105,6 @@ export function createApiClient(options = {}) {
       effectiveTimeout,
     );
 
-    // Формируем заголовки
     const headers = { Accept: "application/json" };
     let serializedBody;
     if (body !== undefined && body !== null) {
@@ -149,11 +146,9 @@ export function createApiClient(options = {}) {
       throw new ApiError("fetchFn вернул некорректный Response.", { kind: "invalid-response", url });
     }
 
-    // 204/205 — успешный ответ без тела
     if (response.status === 204 || response.status === 205) return null;
     if (response.headers.get("content-length") === "0") return null;
 
-    // HTTP-ошибка важнее проверки Content-Type
     if (!response.ok) {
       let code = null;
       let details = null;
@@ -169,12 +164,10 @@ export function createApiClient(options = {}) {
           }
         }
       } catch {
-        // тело не удалось разобрать — оставляем дефолтное сообщение
       }
       throw new ApiError(message, { kind: "http", status: response.status, code, details, url });
     }
 
-    // Успешный ответ: проверяем Content-Type
     const contentType = response.headers.get("content-type") ?? "";
     if (!contentType.toLowerCase().includes("application/json")) {
       throw new ApiError(

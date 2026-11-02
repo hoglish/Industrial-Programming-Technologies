@@ -11,9 +11,6 @@ function readApiUrl(params) {
   return url.href.replace(/\/$/, "");
 }
 
-// Синхронное создание задачи через XMLHttpRequest.
-// Возвращает подтверждённый сервером объект (ответ 201).
-// Применяется только для операции создания — остальное идёт через fetch.
 function makeSyncCreate(baseUrl) {
   return function syncCreate(draft) {
     const xhr = new XMLHttpRequest();

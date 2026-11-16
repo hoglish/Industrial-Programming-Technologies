@@ -13,6 +13,8 @@ export function useTaskData({ api, filters }) {
   const mountedRef = useRef(true);
   const mutationControllerRef = useRef(null);
 
+  
+
   // Эффект монтирования для StrictMode
   useEffect(() => {
     mountedRef.current = true;

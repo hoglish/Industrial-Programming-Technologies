@@ -1,0 +1,25 @@
+services:
+  postgres:
+    image: postgres:18-alpine
+    container_name: tip_practice_11_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: tip_tasks
+      POSTGRES_USER: tip_app
+      POSTGRES_PASSWORD: your_secure_password_here
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql
+      - ./sql:/sql_scripts
+      - ./checks:/checks_scripts
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tip_app -d tip_tasks"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pg_data:
+
+  

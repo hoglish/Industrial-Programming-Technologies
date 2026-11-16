@@ -13,7 +13,6 @@ export default function App() {
   const [filters, setFilters] = useState(createInitialFilters);
   const [editingId, setEditingId] = useState(null);
 
-  // Вычисляемые значения (не хранятся в состоянии)
   const visibleTasks = selectTasks(tasks, filters);
   const stats = getTaskStats(tasks);
   const editingTask = editingId !== null ? tasks.find(t => t.id === editingId) ?? null : null;
